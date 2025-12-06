@@ -1,0 +1,5 @@
+{
+  "name": "SMO - Manifesto Operacional",
+  "description": "Operational Manifesto Control System interacting with Supabase and N8N automation.",
+  "requestFramePermissions": []
+}
