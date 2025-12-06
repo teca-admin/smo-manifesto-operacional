@@ -1,6 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://uenyphrkihqrxvygceqn.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlbnlwaHJraWhxcnh2eWdjZXFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQwMDgyMjIsImV4cCI6MjA3OTU4NDIyMn0.54hKp2bE9_wbQSE0PYSrv7v-2ojgLo7KatGOzEL2q8Q';
+// Configuração do Supabase (Easypanel)
+const supabaseUrl = 'https://teca-admin-supabase.ly7t0m.easypanel.host/'; 
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyAgCiAgICAicm9sZSI6ICJhbm9uIiwKICAgICJpc3MiOiAic3VwYWJhc2UtZGVtbyIsCiAgICAiaWF0IjogMTY0MTc2OTIwMCwKICAgICJleHAiOiAxNzk5NTM1NjAwCn0.dc_X5iR_VP_qT0zsiyj_I_OZ2T9FtRU2BBNWN8Bu4GE';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  db: {
+    schema: 'SMO_Sistema_de_Manifesto_Operacional',
+  },
+});

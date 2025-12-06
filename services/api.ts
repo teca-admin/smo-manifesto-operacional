@@ -1,5 +1,23 @@
 import { supabase } from '../supabaseClient';
 
+// --- CHECK CONNECTION ---
+// Função utilitária para verificar se a conexão com o Supabase está funcionando
+export const checkConnection = async (): Promise<{ success: boolean; message: string }> => {
+  try {
+    // Tenta uma consulta leve apenas para verificar a conectividade e permissões
+    const { error } = await supabase
+      .from('SMO_Sistema')
+      .select('count', { count: 'exact', head: true });
+
+    if (error) {
+      return { success: false, message: error.message };
+    }
+    return { success: true, message: 'Conectado com sucesso' };
+  } catch (e: any) {
+    return { success: false, message: e.message || "Erro desconhecido de conexão" };
+  }
+};
+
 // --- INICIAR MANIFESTO: NAMES ---
 // Prompt: Ação: Iniciar Manifesto | Campo: Nome | Table: Cadastro_Operacional
 // Logic: Retornar os dados da tabela "Usuario_Operação"
@@ -166,17 +184,8 @@ export const submitManifestoAction = async (
     }
 
     // 3. Webhook Integration
-    let webhookUrl = '';
-
-    // Explicitly using the URLs provided
-    if (action === 'Iniciar Manifesto') {
-      webhookUrl = 'https://projeto-teste-n8n.ly7t0m.easypanel.host/webhook/Manifesto-Operacional';
-    } else if (action === 'Finalizar Manifesto') {
-      webhookUrl = 'https://projeto-teste-n8n.ly7t0m.easypanel.host/webhook/Manifesto-Operacional';
-    } else {
-      // Fallback
-      webhookUrl = 'https://projeto-teste-n8n.ly7t0m.easypanel.host/webhook/Manifesto-Operacional';
-    }
+    // Updated Webhook URL for Easypanel N8N
+    const webhookUrl = 'https://teca-admin-n8n.ly7t0m.easypanel.host/webhook/Manifesto-Operacional';
 
     const formattedDate = new Date().toLocaleString('pt-BR');
     let webhookBody: any = {};

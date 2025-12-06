@@ -11,7 +11,8 @@ import {
   fetchManifestosForEmployee, 
   fetchManifestoLoads,
   fetchCIAs,
-  submitManifestoAction
+  submitManifestoAction,
+  checkConnection
 } from './services/api';
 import { supabase } from './supabaseClient';
 import LoadingOverlay from './components/LoadingOverlay';
@@ -46,6 +47,22 @@ const App: React.FC = () => {
   const [updating, setUpdating] = useState<boolean>(false); // For the refresh button spinner
   const [feedback, setFeedback] = useState<FeedbackMessage>({ text: '', type: '' });
   const [lastSubmission, setLastSubmission] = useState<string | null>(null);
+  
+  // Connection State
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  // --- Initial Check ---
+  useEffect(() => {
+    const verifyConnection = async () => {
+        const result = await checkConnection();
+        if (!result.success) {
+            setConnectionError(result.message);
+        } else {
+            setConnectionError(null);
+        }
+    };
+    verifyConnection();
+  }, []);
 
   // --- Data Loading Functions ---
 
@@ -77,7 +94,7 @@ const App: React.FC = () => {
       .channel('realtime-updates')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'SMO_Sistema' },
+        { event: '*', schema: 'SMO_Sistema_de_Manifesto_Operacional', table: 'SMO_Sistema' },
         (payload) => {
           // If SMO_Sistema changes (new manifesto or status change), refresh relevant lists
           if (action === 'Iniciar Manifesto') {
@@ -93,7 +110,7 @@ const App: React.FC = () => {
       )
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'Cadastro_Operacional' },
+        { event: '*', schema: 'SMO_Sistema_de_Manifesto_Operacional', table: 'Cadastro_Operacional' },
         (payload) => {
           // If a new employee is added
           if (action === 'Iniciar Manifesto') loadNames();
@@ -127,6 +144,9 @@ const App: React.FC = () => {
   // Handle Refresh Click
   const handleRefresh = () => {
     if (updating) return;
+    setConnectionError(null);
+    checkConnection().then(res => !res.success && setConnectionError(res.message));
+
     if (action === 'Iniciar Manifesto') {
       loadIds();
       loadNames();
@@ -257,6 +277,20 @@ const App: React.FC = () => {
         SMO - Manifesto Operacional
       </h2>
 
+      {/* Connection Error Banner */}
+      {connectionError && (
+        <div className="bg-[#fff0f1] border border-[#ffcdd2] text-[#c62828] p-3 rounded-[8px] text-[13px] text-left mb-4">
+            <p className="font-bold mb-1">Erro de Conexão com Banco de Dados:</p>
+            <p className="mb-2 break-all">{connectionError}</p>
+            <p className="text-[11px] text-[#444]">
+                Verifique se a URL em <code>supabaseClient.ts</code> está correta:
+            </p>
+            <code className="block bg-white p-1 mt-1 rounded border text-[10px] break-all">
+                {(supabase as any).supabaseUrl || 'URL não definida'}
+            </code>
+        </div>
+      )}
+
       {/* Action Selection */}
       <label htmlFor="acao" className="block mt-[15px] mb-[5px] font-bold text-[#444] text-[14px] text-left">
         Ação
@@ -268,6 +302,7 @@ const App: React.FC = () => {
                 value={action}
                 onChange={(val) => setAction(val as ActionType)}
                 placeholder="Selecione"
+                disabled={!!connectionError}
             />
         </div>
 
@@ -277,6 +312,7 @@ const App: React.FC = () => {
                 onClick={handleRefresh}
                 className={`w-[45px] h-[45px] mt-[5px] p-0 bg-transparent text-[#ee2536] font-bold border border-[#ee2536] rounded-[12px] cursor-pointer transition-all duration-200 text-[18px] flex items-center justify-center flex-shrink-0 hover:bg-[#fff0f1] ${updating ? 'opacity-70 cursor-wait' : ''}`}
                 title="Atualizar lista"
+                disabled={!!connectionError}
             >
                 <div className={updating ? 'animate-spin' : ''}>
                     <RefreshIcon />
@@ -297,6 +333,7 @@ const App: React.FC = () => {
                     onChange={setName}
                     placeholder="Digite ou selecione"
                     searchable={true}
+                    disabled={!!connectionError}
                 />
             </div>
 
@@ -306,7 +343,7 @@ const App: React.FC = () => {
                 <div className="max-h-[200px] overflow-y-auto custom-scrollbar bg-[#f8f9fa] border border-[#dee2e6] rounded-[12px] p-[10px]">
                      {idsList.length === 0 ? (
                         <div className="text-[#6c757d] italic text-center p-[20px] text-[13px]">
-                            Nenhum manifesto disponível
+                            {connectionError ? 'Sem conexão' : 'Nenhum manifesto disponível'}
                         </div>
                      ) : (
                          idsList.map(id => (
@@ -345,6 +382,7 @@ const App: React.FC = () => {
                     onChange={handleNameChange}
                     placeholder="Selecione"
                     searchable={true}
+                    disabled={!!connectionError}
                 />
             </div>
 
@@ -467,7 +505,7 @@ const App: React.FC = () => {
         <button 
             id="btnEnviar"
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || !!connectionError}
             className={`w-full p-[14px] mt-[25px] bg-gradient-to-br from-[#ee2536] to-[#ff6f61] text-white font-bold text-[16px] border-none rounded-[12px] cursor-pointer transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-[1.03] hover:shadow-[0_5px_15px_rgba(238,37,54,0.4)]`}
         >
             {loading ? 'Processando...' : (action === 'Iniciar Manifesto' ? 'Iniciar' : 'Finalizar')}
