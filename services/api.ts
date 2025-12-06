@@ -118,33 +118,6 @@ export const fetchManifestosForEmployee = async (name: string): Promise<string[]
   }
 };
 
-// --- FETCH MANIFESTO LOADS (Cargas) ---
-// Used for Partial/Complete finalization logic
-export const fetchManifestoLoads = async (id: string): Promise<{ inh: number; iz: number }> => {
-  try {
-    const { data, error } = await supabase
-      .from('SMO_Sistema')
-      .select('"Cargas_(IN/H)", "Cargas_(IZ)"')
-      .eq('ID_Manifesto', id)
-      .single();
-
-    if (error) {
-      console.warn("Error fetching manifesto loads.", error);
-      return { inh: 0, iz: 0 };
-    }
-
-    if (!data) return { inh: 0, iz: 0 };
-
-    return {
-      inh: Number(data['Cargas_(IN/H)']) || 0,
-      iz: Number(data['Cargas_(IZ)']) || 0
-    };
-  } catch (e) {
-    console.error("Unexpected error in fetchManifestoLoads", e);
-    return { inh: 0, iz: 0 };
-  }
-};
-
 // --- HELPER FUNCTIONS (UNUSED IN LOGIC BUT KEPT FOR STRUCTURE IF NEEDED) ---
 export const fetchCIAs = async (): Promise<string[]> => { return []; };
 export const fetchManifestosByCIA = async (cia: string): Promise<string[]> => { return []; };
@@ -154,8 +127,7 @@ export const fetchNamesByStatus = async (status: string): Promise<string[]> => {
 export const submitManifestoAction = async (
   action: string, 
   id: string, 
-  name: string,
-  extraData?: { type: 'Completo' | 'Parcial'; inh: number; iz: number }
+  name: string
 ): Promise<{ success: boolean; message: string }> => {
   try {
     // 1. Insert Log
@@ -192,19 +164,17 @@ export const submitManifestoAction = async (
 
     if (action === 'Iniciar Manifesto') {
         webhookBody = {
+            "ação": action,
             id_manifesto: id,
             nome: name,
             Manifesto_Iniciado: formattedDate
         };
     } else if (action === 'Finalizar Manifesto') {
         webhookBody = {
+            "ação": action,
             id_manifesto: id,
             nome: name,
-            Manifesto_Finalizado: formattedDate,
-            // Include extra data if available
-            Tipo_Baixa: extraData?.type || 'Completo',
-            Cargas_INH_Entregue: extraData?.inh ?? 0,
-            Cargas_IZ_Entregue: extraData?.iz ?? 0
+            Manifesto_Finalizado: formattedDate
         };
     }
 
