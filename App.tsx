@@ -2,7 +2,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   ActionType, 
-  FeedbackMessage 
+  FeedbackMessage,
+  ManifestoItem
 } from './types';
 import { 
   fetchNames, 
@@ -13,6 +14,7 @@ import {
   fetchManifestosByCIA, 
   fetchCIAs,
   submitManifestoAction,
+  processBatchManifestos, // Import batch function
   checkConnection,
   authenticateCIA,
   fetchCIAUsers
@@ -63,7 +65,7 @@ const App: React.FC = () => {
   
   // Data Lists
   const [namesList, setNamesList] = useState<string[]>([]);
-  const [idsList, setIdsList] = useState<string[]>([]);
+  const [idsList, setIdsList] = useState<ManifestoItem[]>([]);
   const [manifestosForEmployee, setManifestosForEmployee] = useState<string[]>([]);
 
   // UI State
@@ -126,11 +128,13 @@ const App: React.FC = () => {
   const loadIdsForConference = useCallback(async () => {
     if (!currentUser) return; // Must have a logged in CIA user
     setUpdating(true);
-    // Fetch manifestos for the specific CIA that are finalized
-    const ids = await fetchManifestosByCIA(currentUser);
+    // Determine view mode: 'completed' if user selected 'Conferência Concluída', otherwise 'pending'
+    const mode = action === 'Conferência Concluída' ? 'completed' : 'pending';
+    // Fetch manifestos for the specific CIA with the correct mode
+    const ids = await fetchManifestosByCIA(currentUser, mode);
     setIdsList(ids);
     setTimeout(() => setUpdating(false), 500);
-  }, [currentUser]);
+  }, [currentUser, action]);
 
   const loadIdsFinalization = useCallback(async () => {
     setUpdating(true);
@@ -158,7 +162,7 @@ const App: React.FC = () => {
             if (name) {
               fetchManifestosForEmployee(name).then(setManifestosForEmployee);
             }
-          } else if (action === 'Conferir Manifesto') {
+          } else if (action === 'Conferir Manifesto' || action === 'Conferência Concluída') {
             loadIdsForConference();
           }
         }
@@ -192,7 +196,7 @@ const App: React.FC = () => {
       loadIds();
     } else if (action === 'Finalizar Manifesto') {
       loadIdsFinalization(); // Loads names for finalization
-    } else if (action === 'Conferir Manifesto') {
+    } else if (action === 'Conferir Manifesto' || action === 'Conferência Concluída') {
       loadIdsForConference(); // Loads IDs for conference filtered by CIA
     }
   }, [action, loadNames, loadIds, loadIdsFinalization, loadIdsForConference]);
@@ -208,7 +212,7 @@ const App: React.FC = () => {
       loadNames();
     } else if (action === 'Finalizar Manifesto') {
       loadIdsFinalization();
-    } else if (action === 'Conferir Manifesto') {
+    } else if (action === 'Conferir Manifesto' || action === 'Conferência Concluída') {
       loadIdsForConference();
     }
   };
@@ -227,6 +231,9 @@ const App: React.FC = () => {
   
   // Handle Manifesto ID Selection
   const handleManifestoSelect = async (id: string) => {
+      // For Conferir Manifesto (Batch mode), we might not select individual IDs anymore, 
+      // but if the view is "Conferência Concluída" or "Iniciar", we might.
+      // Logic below handles normal selection.
       setSelectedManifestoId(id);
   };
 
@@ -257,14 +264,19 @@ const App: React.FC = () => {
   };
 
   // Handle Submission
-  const handleSubmit = async () => {
+  const handleSubmit = async (overrideAction?: ActionType) => {
     setFeedback({ text: '', type: '' });
 
-    // For Conferir Manifesto (CIA), we use the logged-in user, not the 'name' state
-    const submissionName = action === 'Conferir Manifesto' ? currentUser : name;
+    // Determine the actual action to submit (use override if button provides one, else use state)
+    const actionToSubmit = overrideAction || action;
+    const submissionName = (action === 'Conferir Manifesto' || action === 'Conferência Concluída') ? currentUser : name;
 
     // Validation
-    if (!action) return;
+    if (!actionToSubmit) return;
+    
+    // BATCH MODE CHECK for 'Conferir Manifesto'
+    const isBatchMode = (action === 'Conferir Manifesto' && userType === 'CIA');
+
     if (action === 'Iniciar Manifesto' && (!submissionName || !selectedManifestoId)) {
       setFeedback({ text: 'Preencha todos os campos.', type: 'error' });
       return;
@@ -273,19 +285,32 @@ const App: React.FC = () => {
         setFeedback({ text: 'Preencha todos os campos.', type: 'error' });
         return;
     }
-    if (action === 'Conferir Manifesto' && !selectedManifestoId) {
-        setFeedback({ text: 'Selecione um manifesto.', type: 'error' });
-        return;
+    
+    // In batch mode, we check if list is empty instead of selected ID
+    if (isBatchMode) {
+        if (idsList.length === 0) {
+            setFeedback({ text: 'Não há manifestos para processar.', type: 'error' });
+            return;
+        }
+    } else {
+        // Normal single selection mode
+        if ((action === 'Conferir Manifesto' || action === 'Conferência Concluída') && !selectedManifestoId) {
+            setFeedback({ text: 'Selecione um manifesto.', type: 'error' });
+            return;
+        }
     }
 
     // Strict name check only if list is populated and not empty (only for WFS actions where name is selected)
-    if (action !== 'Conferir Manifesto' && namesList.length > 0 && !namesList.some(n => n.toLowerCase() === submissionName.toLowerCase())) {
+    if (action !== 'Conferir Manifesto' && action !== 'Conferência Concluída' && namesList.length > 0 && !namesList.some(n => n.toLowerCase() === submissionName.toLowerCase())) {
         setFeedback({ text: 'Por favor, escolha um nome válido da lista.', type: 'error' });
         return;
     }
 
-    // Duplicate Check
-    const submissionKey = `${action}-${selectedManifestoId}-${submissionName}`;
+    // Duplicate Check (Batch mode generally skips this or checks within function)
+    const submissionKey = isBatchMode 
+        ? `${actionToSubmit}-BATCH-${idsList.length}-${submissionName}`
+        : `${actionToSubmit}-${selectedManifestoId}-${submissionName}`;
+
     if (lastSubmission === submissionKey) {
       setFeedback({ text: 'Este registro já foi enviado recentemente!', type: 'error' });
       return;
@@ -296,7 +321,19 @@ const App: React.FC = () => {
 
     // Simulate Network Request
     setTimeout(async () => {
-      const result = await submitManifestoAction(action, selectedManifestoId, submissionName);
+      let result;
+      
+      if (isBatchMode) {
+          // Call Batch Processing
+          // We map 'Processar Manifesto' button to 'Conferência Concluída' or 'Conferir Manifesto' action internally
+          // Based on previous requests, 'Conferir Manifesto' action sets status to 'Conferência Concluída'.
+          const allIds = idsList.map(item => item.id);
+          // Use the action 'Conferir Manifesto' to trigger the standard success status/log/webhook
+          result = await processBatchManifestos('Conferir Manifesto', allIds, submissionName);
+      } else {
+          // Standard Single Processing
+          result = await submitManifestoAction(actionToSubmit, selectedManifestoId, submissionName);
+      }
       
       setLoading(false);
       
@@ -465,7 +502,7 @@ const App: React.FC = () => {
       <div className="flex gap-2 items-start">
         <div className="flex-1">
             <CustomSelect 
-                options={userType === 'CIA' ? ['Conferir Manifesto'] : ['Iniciar Manifesto', 'Finalizar Manifesto']}
+                options={userType === 'CIA' ? ['Conferir Manifesto', 'Conferência Concluída'] : ['Iniciar Manifesto', 'Finalizar Manifesto']}
                 value={action}
                 onChange={(val) => setAction(val as ActionType)}
                 placeholder="Selecione"
@@ -491,9 +528,9 @@ const App: React.FC = () => {
 
       {/* -------------------- INICIAR / CONFERIR MANIFESTO VIEW -------------------- */}
       {/* Both use a direct list of IDs without a Name filter step first */}
-      {(action === 'Iniciar Manifesto' || action === 'Conferir Manifesto') && (
+      {(action === 'Iniciar Manifesto' || action === 'Conferir Manifesto' || action === 'Conferência Concluída') && (
         <div className="animate-fadeIn">
-            {/* Name Input (Only for Iniciar, NOT for Conferir) */}
+            {/* Name Input (Only for Iniciar, NOT for Conferir/Concluída) */}
             {action === 'Iniciar Manifesto' && (
                 <div className="mt-[15px]">
                     <label htmlFor="nome" className="block mb-[5px] font-bold text-[#444] text-[14px] text-left">Nome</label>
@@ -517,24 +554,55 @@ const App: React.FC = () => {
                             {connectionError ? 'Sem conexão' : 'Nenhum manifesto disponível'}
                         </div>
                      ) : (
-                         idsList.map(id => (
+                         idsList.map(item => {
+                            // Conditional Styles:
+                            // If Batch Mode (Conferir Manifesto): Read-only look, non-clickable (or inactive click)
+                            // If Single Mode (Others): Selectable buttons
+                            const isBatchMode = (action === 'Conferir Manifesto' && userType === 'CIA');
+                            const isSelected = selectedManifestoId === item.id;
+                            
+                            return (
                             <button
-                                key={id}
-                                onClick={() => setSelectedManifestoId(id)}
-                                className={`w-full flex justify-between items-center p-[12px] my-[6px] border rounded-[10px] text-[13px] text-left font-medium relative transition-all duration-200 cursor-pointer 
-                                    ${selectedManifestoId === id 
-                                        ? `${userType === 'CIA' ? 'bg-gradient-to-r from-[#50284f] to-[#7a3e79]' : 'bg-gradient-to-r from-[#ee2f24] to-[#ff6f61]'} text-white border-transparent shadow-md transform scale-[1.02]` 
-                                        : 'bg-white text-[#495057] border-[#e9ecef] hover:bg-[#fff0f1] hover:border-[#ffcdd2]'
+                                key={item.id}
+                                onClick={() => !isBatchMode && handleManifestoSelect(item.id)}
+                                disabled={isBatchMode}
+                                className={`w-full flex flex-col justify-center items-start p-[12px] my-[6px] border rounded-[10px] text-[13px] text-left font-medium relative transition-all duration-200 
+                                    ${isBatchMode 
+                                        ? 'bg-white text-[#444] border-[#d1d1d1] opacity-90 cursor-default' // Batch Style
+                                        : (isSelected 
+                                            ? `${userType === 'CIA' ? 'bg-gradient-to-r from-[#50284f] to-[#7a3e79]' : 'bg-gradient-to-r from-[#ee2f24] to-[#ff6f61]'} text-white border-transparent shadow-md transform scale-[1.02] cursor-pointer` 
+                                            : 'bg-white text-[#495057] border-[#e9ecef] hover:bg-[#fff0f1] hover:border-[#ffcdd2] cursor-pointer'
+                                        )
                                     }`}
                             >
-                                <span className="font-bold">{id}</span>
-                                {selectedManifestoId === id && (
-                                    <span className="bg-white/25 text-white text-[10px] uppercase font-bold px-[8px] py-[2px] rounded-[6px] border border-white/40 tracking-wide">
-                                        {action === 'Iniciar Manifesto' ? 'Iniciar' : 'Conferir'}
-                                    </span>
+                                <div className="w-full flex justify-between items-center">
+                                    <span className="font-bold">{item.id}</span>
+                                    {!isBatchMode && isSelected && (
+                                        <span className="bg-white/25 text-white text-[10px] uppercase font-bold px-[8px] py-[2px] rounded-[6px] border border-white/40 tracking-wide">
+                                            {action === 'Iniciar Manifesto' ? 'Iniciar' : 'Ver'}
+                                        </span>
+                                    )}
+                                </div>
+                                
+                                {/* Show Details: Always show in Batch Mode, or only on select in Single Mode */}
+                                {( (isBatchMode) || (isSelected) ) && (userType === 'CIA') && (item.cargasInh || item.cargasIz) && (
+                                    <div className={`mt-3 w-full p-2 rounded text-[12px] leading-relaxed border flex flex-row gap-4 ${isBatchMode ? 'bg-[#f0f0f0] border-gray-300' : 'bg-white/10 border-white/20'}`}>
+                                        {item.cargasInh && (
+                                            <div className="flex-1">
+                                                <span className="font-bold opacity-80 block text-[10px] uppercase">Cargas (IN/H):</span>
+                                                <span className="font-normal">{item.cargasInh}</span>
+                                            </div>
+                                        )}
+                                        {item.cargasIz && (
+                                            <div className="flex-1">
+                                                <span className="font-bold opacity-80 block text-[10px] uppercase">Cargas (IZ):</span>
+                                                <span className="font-normal">{item.cargasIz}</span>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </button>
-                         ))
+                         )})
                      )}
                 </div>
             </div>
@@ -595,20 +663,43 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Submit Button */}
+      {/* Submit Buttons */}
       {action && (
-        <button 
-            id="btnEnviar"
-            onClick={handleSubmit}
-            disabled={loading || !!connectionError}
-            className={`w-full p-[14px] mt-[25px] bg-gradient-to-br ${userType === 'CIA' ? 'from-[#50284f] to-[#7a3e79] hover:shadow-[0_5px_15px_rgba(80,40,79,0.4)]' : 'from-[#ee2f24] to-[#ff6f61] hover:shadow-[0_5px_15px_rgba(238,47,36,0.4)]'} text-white font-bold text-[16px] border-none rounded-[12px] cursor-pointer transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-[1.03]`}
-        >
-            {loading ? 'Processando...' : (
-                action === 'Iniciar Manifesto' ? 'Iniciar Manifesto' : 
-                action === 'Finalizar Manifesto' ? 'Finalizar Manifesto' : 
-                'Iniciar Conferência'
-            )}
-        </button>
+        userType === 'CIA' ? (
+            // CIA BUTTONS Logic
+            action === 'Conferir Manifesto' ? (
+                 <button 
+                    onClick={() => handleSubmit('Conferência Concluída')} // Uses bulk logic inside handleSubmit
+                    disabled={loading || !!connectionError}
+                    className="w-full mt-[25px] p-[14px] bg-gradient-to-br from-[#50284f] to-[#7a3e79] hover:shadow-[0_5px_15px_rgba(80,40,79,0.4)] text-white font-bold text-[16px] border-none rounded-[12px] cursor-pointer transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-[1.03]"
+                >
+                    {loading ? 'Processando...' : 'Processar Manifesto'}
+                </button>
+            ) : (
+                // For 'Conferência Concluída' view (History) - Maybe just 'Voltar' is enough, but user might want to re-process? 
+                // Usually history is read-only. But keeping generic button if needed, or maybe hiding it.
+                // Assuming we just show details and user hits 'Voltar'. But if needed, we keep a generic button or nothing.
+                // The prompt only mentioned changing buttons for "Conferir Manifesto".
+                // I will keep a single disabled-like button or just hide it for history view to avoid confusion.
+                // However, user might click list item to see details.
+                // Let's hide submit button for history view as it implies "Done".
+                null
+            )
+        ) : (
+            // WFS BUTTONS Logic
+            <button 
+                id="btnEnviar"
+                onClick={() => handleSubmit()}
+                disabled={loading || !!connectionError}
+                className={`w-full p-[14px] mt-[25px] bg-gradient-to-br from-[#ee2f24] to-[#ff6f61] hover:shadow-[0_5px_15px_rgba(238,47,36,0.4)] text-white font-bold text-[16px] border-none rounded-[12px] cursor-pointer transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed hover:scale-[1.03]`}
+            >
+                {loading ? 'Processando...' : (
+                    action === 'Iniciar Manifesto' ? 'Iniciar Manifesto' : 
+                    action === 'Finalizar Manifesto' ? 'Finalizar Manifesto' : 
+                    'Enviar'
+                )}
+            </button>
+        )
       )}
 
       {/* Feedback Messages */}

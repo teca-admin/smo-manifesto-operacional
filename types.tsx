@@ -6,7 +6,13 @@ export interface Manifesto {
   cia?: string;
 }
 
-export type ActionType = '' | 'Iniciar Manifesto' | 'Finalizar Manifesto' | 'Conferir Manifesto';
+export interface ManifestoItem {
+  id: string;
+  cargasInh?: string;
+  cargasIz?: string;
+}
+
+export type ActionType = '' | 'Iniciar Manifesto' | 'Finalizar Manifesto' | 'Conferir Manifesto' | 'Conferência Concluída' | 'Pendente';
 
 export interface FeedbackMessage {
   text: string;
