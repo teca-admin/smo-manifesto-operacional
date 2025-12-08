@@ -279,7 +279,7 @@ export const submitManifestoAction = async (
     } else if (action === 'Finalizar Manifesto') {
         return { success: true, message: 'Manifesto finalizado com sucesso!' };
     } else if (action === 'Conferir Manifesto') {
-        return { success: true, message: 'Conferência concluída com sucesso!' };
+        return { success: true, message: 'Conferência Iniciada' };
     } else {
         return { success: true, message: 'Registro salvo com sucesso!' };
     }

@@ -604,7 +604,7 @@ const App: React.FC = () => {
             {loading ? 'Processando...' : (
                 action === 'Iniciar Manifesto' ? 'Iniciar Manifesto' : 
                 action === 'Finalizar Manifesto' ? 'Finalizar Manifesto' : 
-                'Conferência Concluída'
+                'Iniciar Conferência'
             )}
         </button>
       )}
