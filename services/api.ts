@@ -168,6 +168,7 @@ export const fetchManifestosForEmployee = async (name: string): Promise<string[]
 // Logic: Filter by CIA column in SMO_Operacional
 // Update: Query ID_Manifesto directly as the ID column, and use ilike for CIA to handle casing issues
 // Update 2: Filter out records where 'Ação' is 'Conferir Manifesto'
+// Update 3: Robust filtering for Ação (trim, lowercase, handle legacy 'Conferência Concluída')
 export const fetchManifestosByCIA = async (cia: string): Promise<string[]> => {
   try {
     const { data, error } = await supabase
@@ -183,7 +184,18 @@ export const fetchManifestosByCIA = async (cia: string): Promise<string[]> => {
     if (!data) return [];
 
     // Filter logic: Only return items where Ação is NOT "Conferir Manifesto"
-    const filteredData = data.filter((item: any) => item['Ação'] !== 'Conferir Manifesto');
+    // Using robust comparison to handle potential whitespace or casing mismatches in the DB
+    const filteredData = data.filter((item: any) => {
+        const acaoRaw = item['Ação'];
+        // If action is null/empty, we keep it (it's available)
+        if (!acaoRaw) return true;
+        
+        const acao = acaoRaw.toString().trim().toLowerCase();
+        // Hide if it matches 'conferir manifesto' or legacy 'conferência concluída'
+        return acao !== 'conferir manifesto' && 
+               acao !== 'conferência concluída' && 
+               acao !== 'conferencia concluida';
+    });
 
     const uniqueIds = Array.from(new Set(filteredData.map((item: any) => item['ID_Manifesto']))).filter(Boolean);
     return uniqueIds.sort() as string[];

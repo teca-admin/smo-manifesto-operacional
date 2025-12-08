@@ -303,18 +303,20 @@ const App: React.FC = () => {
       if (result.success) {
         setLastSubmission(submissionKey);
 
-        // Reset App State to Initial (but keep action for convenience)
-        setSelectedManifestoId('');
-        setManifestosForEmployee([]);
-        // We only clear name if it's not Conferir (since currentUser persists)
-        if (action !== 'Conferir Manifesto') setName('');
+        // Show feedback success briefly before redirecting
+        setFeedback({ text: result.message, type: 'success' });
 
-        // Show feedback AFTER state reset
+        // Redirect to Main Menu after short delay to show success message
         setTimeout(() => {
-            setFeedback({ text: result.message, type: 'success' });
-            // Auto hide success message
-            setTimeout(() => setFeedback({text: '', type: ''}), 4000);
-        }, 100);
+            setFeedback({ text: '', type: '' });
+            setUserType(null); // Return to main menu
+            setCurrentUser('');
+            setShowCIALogin(false);
+            setAction('');
+            setName('');
+            setSelectedManifestoId('');
+            setManifestosForEmployee([]);
+        }, 1500);
 
       } else {
         setFeedback({ text: result.message, type: 'error' });
