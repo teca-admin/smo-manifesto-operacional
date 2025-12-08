@@ -200,6 +200,32 @@ export const submitManifestoAction = async (
   name: string
 ): Promise<{ success: boolean; message: string }> => {
   try {
+    // 0. Validation: Check current status to prevent duplicates
+    // Fetch the current status of the manifesto
+    const { data: currentData, error: currentError } = await supabase
+      .from('SMO_Sistema')
+      .select('Status')
+      .eq('ID_Manifesto', id)
+      .single();
+    
+    if (currentError) {
+        return { success: false, message: 'Erro ao validar status do manifesto: ' + currentError.message };
+    }
+
+    const currentStatus = (currentData?.Status || '').trim().toLowerCase();
+
+    // Validate Status transition
+    // Nota: Removida a validação para "Conferir Manifesto" pois a trava deve existir apenas para a área WFS.
+    if (action === 'Iniciar Manifesto') {
+        if (!currentStatus.includes('manifesto recebido')) {
+             return { success: false, message: 'Ação bloqueada: Este manifesto já foi iniciado ou processado.' };
+        }
+    } else if (action === 'Finalizar Manifesto') {
+        if (!currentStatus.includes('manifesto iniciado')) {
+             return { success: false, message: 'Ação bloqueada: Este manifesto não está iniciado.' };
+        }
+    } 
+
     // 1. Insert Log
     const { error } = await supabase
       .from('registros_operacionais')
@@ -258,7 +284,7 @@ export const submitManifestoAction = async (
             "ação": action,
             id_manifesto: id,
             nome: name,
-            Conferencia_Concluida: formattedDate
+            "Conferir Manifesto": formattedDate
         };
     }
 
