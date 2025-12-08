@@ -9,7 +9,8 @@ import {
   fetchNamesByStatus,
   fetchNamesForFinalization,
   fetchIdsByStatus, 
-  fetchManifestosForEmployee, 
+  fetchManifestosForEmployee,
+  fetchManifestosByCIA, 
   fetchCIAs,
   submitManifestoAction,
   checkConnection,
@@ -44,6 +45,7 @@ const EyeOffIcon = () => (
 const App: React.FC = () => {
   // Login State
   const [userType, setUserType] = useState<'WFS' | 'CIA' | null>(null);
+  const [currentUser, setCurrentUser] = useState<string>(''); // Stores logged in CIA user
 
   // CIA Login State
   const [showCIALogin, setShowCIALogin] = useState(false);
@@ -121,9 +123,18 @@ const App: React.FC = () => {
     setTimeout(() => setUpdating(false), 500); // Visual delay for spinner
   }, []);
 
+  const loadIdsForConference = useCallback(async () => {
+    if (!currentUser) return; // Must have a logged in CIA user
+    setUpdating(true);
+    // Fetch manifestos for the specific CIA that are finalized
+    const ids = await fetchManifestosByCIA(currentUser);
+    setIdsList(ids);
+    setTimeout(() => setUpdating(false), 500);
+  }, [currentUser]);
+
   const loadIdsFinalization = useCallback(async () => {
     setUpdating(true);
-    // Based on requested logic: Finalizar/Conferir Manifesto loads names where Manifesto_Iniciado is NOT NULL
+    // Based on requested logic: Finalizar Manifesto loads names where Manifesto_Iniciado is NOT NULL
     const names = await fetchNamesForFinalization();
     setNamesList(names);
     setTimeout(() => setUpdating(false), 500);
@@ -142,12 +153,13 @@ const App: React.FC = () => {
           // If SMO_Sistema changes (new manifesto or status change), refresh relevant lists
           if (action === 'Iniciar Manifesto') {
             loadIds();
-          } else if (action === 'Finalizar Manifesto' || action === 'Conferir Manifesto') {
-            loadIdsFinalization(); // Refresh the list of employees with active manifestos
+          } else if (action === 'Finalizar Manifesto') {
+            loadIdsFinalization();
             if (name) {
-              // Refresh specific employee list if selected
               fetchManifestosForEmployee(name).then(setManifestosForEmployee);
             }
+          } else if (action === 'Conferir Manifesto') {
+            loadIdsForConference();
           }
         }
       )
@@ -164,7 +176,7 @@ const App: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [action, name, loadIds, loadNames, loadIdsFinalization, userType]);
+  }, [action, name, loadIds, loadNames, loadIdsFinalization, loadIdsForConference, userType]);
 
   // --- Event Handlers ---
 
@@ -178,10 +190,12 @@ const App: React.FC = () => {
     if (action === 'Iniciar Manifesto') {
       loadNames();
       loadIds();
-    } else if (action === 'Finalizar Manifesto' || action === 'Conferir Manifesto') {
-      loadIdsFinalization(); // Loads specific names for finalization
+    } else if (action === 'Finalizar Manifesto') {
+      loadIdsFinalization(); // Loads names for finalization
+    } else if (action === 'Conferir Manifesto') {
+      loadIdsForConference(); // Loads IDs for conference filtered by CIA
     }
-  }, [action, loadNames, loadIds, loadIdsFinalization]);
+  }, [action, loadNames, loadIds, loadIdsFinalization, loadIdsForConference]);
 
   // Handle Refresh Click
   const handleRefresh = () => {
@@ -192,16 +206,18 @@ const App: React.FC = () => {
     if (action === 'Iniciar Manifesto') {
       loadIds();
       loadNames();
-    } else if (action === 'Finalizar Manifesto' || action === 'Conferir Manifesto') {
+    } else if (action === 'Finalizar Manifesto') {
       loadIdsFinalization();
+    } else if (action === 'Conferir Manifesto') {
+      loadIdsForConference();
     }
   };
 
-  // Handle Name Selection (Finalizar/Conferir Manifesto)
+  // Handle Name Selection (Finalizar Manifesto)
   const handleNameChange = async (val: string) => {
     setName(val);
     setSelectedManifestoId('');
-    if ((action === 'Finalizar Manifesto' || action === 'Conferir Manifesto') && val) {
+    if (action === 'Finalizar Manifesto' && val) {
       const manifests = await fetchManifestosForEmployee(val);
       setManifestosForEmployee(manifests);
     } else {
@@ -209,7 +225,7 @@ const App: React.FC = () => {
     }
   };
   
-  // Handle Manifesto ID Selection (trigger load fetch)
+  // Handle Manifesto ID Selection
   const handleManifestoSelect = async (id: string) => {
       setSelectedManifestoId(id);
   };
@@ -229,6 +245,7 @@ const App: React.FC = () => {
 
       if (isAuthenticated) {
           setUserType('CIA');
+          setCurrentUser(ciaUsername);
           setShowCIALogin(false);
           // Reset fields
           setCiaUsername('');
@@ -243,25 +260,32 @@ const App: React.FC = () => {
   const handleSubmit = async () => {
     setFeedback({ text: '', type: '' });
 
+    // For Conferir Manifesto (CIA), we use the logged-in user, not the 'name' state
+    const submissionName = action === 'Conferir Manifesto' ? currentUser : name;
+
     // Validation
     if (!action) return;
-    if (action === 'Iniciar Manifesto' && (!name || !selectedManifestoId)) {
+    if (action === 'Iniciar Manifesto' && (!submissionName || !selectedManifestoId)) {
       setFeedback({ text: 'Preencha todos os campos.', type: 'error' });
       return;
     }
-    if ((action === 'Finalizar Manifesto' || action === 'Conferir Manifesto') && (!name || !selectedManifestoId)) {
+    if (action === 'Finalizar Manifesto' && (!submissionName || !selectedManifestoId)) {
         setFeedback({ text: 'Preencha todos os campos.', type: 'error' });
         return;
     }
+    if (action === 'Conferir Manifesto' && !selectedManifestoId) {
+        setFeedback({ text: 'Selecione um manifesto.', type: 'error' });
+        return;
+    }
 
-    // Strict name check only if list is populated and not empty
-    if (action === 'Iniciar Manifesto' && namesList.length > 0 && !namesList.some(n => n.toLowerCase() === name.toLowerCase())) {
+    // Strict name check only if list is populated and not empty (only for WFS actions where name is selected)
+    if (action !== 'Conferir Manifesto' && namesList.length > 0 && !namesList.some(n => n.toLowerCase() === submissionName.toLowerCase())) {
         setFeedback({ text: 'Por favor, escolha um nome válido da lista.', type: 'error' });
         return;
     }
 
     // Duplicate Check
-    const submissionKey = `${action}-${selectedManifestoId}-${name}`;
+    const submissionKey = `${action}-${selectedManifestoId}-${submissionName}`;
     if (lastSubmission === submissionKey) {
       setFeedback({ text: 'Este registro já foi enviado recentemente!', type: 'error' });
       return;
@@ -272,20 +296,20 @@ const App: React.FC = () => {
 
     // Simulate Network Request
     setTimeout(async () => {
-      const result = await submitManifestoAction(action, selectedManifestoId, name);
+      const result = await submitManifestoAction(action, selectedManifestoId, submissionName);
       
       setLoading(false);
       
       if (result.success) {
         setLastSubmission(submissionKey);
 
-        // Reset App State to Initial (Home)
-        setAction('');
-        setName('');
+        // Reset App State to Initial (but keep action for convenience)
         setSelectedManifestoId('');
         setManifestosForEmployee([]);
+        // We only clear name if it's not Conferir (since currentUser persists)
+        if (action !== 'Conferir Manifesto') setName('');
 
-        // Show feedback AFTER state reset to avoid useEffect clearing it
+        // Show feedback AFTER state reset
         setTimeout(() => {
             setFeedback({ text: result.message, type: 'success' });
             // Auto hide success message
@@ -414,7 +438,7 @@ const App: React.FC = () => {
              className="mt-2 inline-block px-3 py-1 bg-[#f0f2f5] text-[#666] text-[11px] font-bold rounded-full uppercase tracking-wider hover:bg-[#e2e4e8]"
              title="Status de acesso"
           >
-              Acesso: {userType}
+              Acesso: {userType} {userType === 'CIA' && currentUser && `(${currentUser})`}
           </div>
       </div>
 
@@ -463,21 +487,24 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {/* -------------------- INICIAR MANIFESTO VIEW -------------------- */}
-      {action === 'Iniciar Manifesto' && (
+      {/* -------------------- INICIAR / CONFERIR MANIFESTO VIEW -------------------- */}
+      {/* Both use a direct list of IDs without a Name filter step first */}
+      {(action === 'Iniciar Manifesto' || action === 'Conferir Manifesto') && (
         <div className="animate-fadeIn">
-            {/* Name Input */}
-            <div className="mt-[15px]">
-                <label htmlFor="nome" className="block mb-[5px] font-bold text-[#444] text-[14px] text-left">Nome</label>
-                <CustomSelect
-                    options={namesList}
-                    value={name}
-                    onChange={setName}
-                    placeholder="Digite ou selecione"
-                    searchable={true}
-                    disabled={!!connectionError}
-                />
-            </div>
+            {/* Name Input (Only for Iniciar, NOT for Conferir) */}
+            {action === 'Iniciar Manifesto' && (
+                <div className="mt-[15px]">
+                    <label htmlFor="nome" className="block mb-[5px] font-bold text-[#444] text-[14px] text-left">Nome</label>
+                    <CustomSelect
+                        options={namesList}
+                        value={name}
+                        onChange={setName}
+                        placeholder="Digite ou selecione"
+                        searchable={true}
+                        disabled={!!connectionError}
+                    />
+                </div>
+            )}
 
             {/* ID Manifesto List */}
             <div className="mt-[15px]">
@@ -501,7 +528,7 @@ const App: React.FC = () => {
                                 <span className="font-bold">{id}</span>
                                 {selectedManifestoId === id && (
                                     <span className="bg-white/25 text-white text-[10px] uppercase font-bold px-[8px] py-[2px] rounded-[6px] border border-white/40 tracking-wide">
-                                        Iniciar
+                                        {action === 'Iniciar Manifesto' ? 'Iniciar' : 'Conferir'}
                                     </span>
                                 )}
                             </button>
@@ -512,8 +539,8 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* -------------------- FINALIZAR/CONFERIR MANIFESTO VIEW -------------------- */}
-      {(action === 'Finalizar Manifesto' || action === 'Conferir Manifesto') && (
+      {/* -------------------- FINALIZAR MANIFESTO VIEW (WFS Only) -------------------- */}
+      {action === 'Finalizar Manifesto' && (
         <div className="animate-fadeIn">
             {/* Employee Name Select */}
             <div className="mt-[15px]">
@@ -525,18 +552,16 @@ const App: React.FC = () => {
                     placeholder="Selecione"
                     searchable={true}
                     disabled={!!connectionError}
-                    theme={userType === 'CIA' ? 'purple' : 'red'}
+                    theme='red'
                 />
             </div>
 
             {/* Expanded Manifesto Selection Area */}
             {name && (
-                // Changed from bg-[#f8f9fa] to bg-white
                 <div className="mt-[10px] bg-white border border-[#dee2e6] rounded-[12px] p-[15px] animate-slideDown">
                     <label className="block mb-[5px] font-bold text-[#444] text-[14px] text-left">
                         ID Manifesto
                     </label>
-                    {/* Added p-[4px] to container to fix clipping issues with hover animations */}
                     <div className="max-h-[200px] overflow-y-auto overflow-x-hidden text-left custom-scrollbar p-[4px]">
                         {manifestosForEmployee.length === 0 ? (
                             <div className="text-[#6c757d] italic text-center p-[20px] text-[13px]">
@@ -553,7 +578,7 @@ const App: React.FC = () => {
                                         onClick={() => handleManifestoSelect(id)}
                                         className={`w-full block p-[10px_12px] my-[6px] border rounded-[8px] text-[13px] text-left font-medium relative transition-all duration-200 cursor-pointer 
                                             ${selectedManifestoId === id 
-                                                ? `${userType === 'CIA' ? 'bg-gradient-to-br from-[#50284f] to-[#7a3e79] border-[#50284f] shadow-[0_4px_12px_rgba(80,40,79,0.3)]' : 'bg-gradient-to-br from-[#ee2f24] to-[#ff6f61] border-[#ee2f24] shadow-[0_4px_12px_rgba(238,47,36,0.3)]'} text-white font-bold` 
+                                                ? 'bg-gradient-to-br from-[#ee2f24] to-[#ff6f61] border-[#ee2f24] shadow-[0_4px_12px_rgba(238,47,36,0.3)] text-white font-bold' 
                                                 : 'bg-[#f5f5f5] text-[#495057] border-[#dee2e6] hover:bg-[#e9ecef] hover:border-[#adb5bd] hover:translate-x-[3px] hover:shadow-[0_2px_8px_rgba(0,0,0,0.1)]'
                                             }`}
                                     >
@@ -599,6 +624,7 @@ const App: React.FC = () => {
       <button 
           onClick={() => {
               setUserType(null);
+              setCurrentUser('');
               setShowCIALogin(false);
               setAction('');
               setName('');

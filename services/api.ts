@@ -116,15 +116,15 @@ export const fetchNamesForFinalization = async (): Promise<string[]> => {
   }
 };
 
-// --- INICIAR MANIFESTO: IDS ---
+// --- INICIAR/CONFERIR MANIFESTO: IDS ---
 // Prompt: Ação: Iniciar Manifesto | Campo: ID Manifesto | Table: SMO_Sistema
-// Logic: Retornar os dados da coluna "ID_Manifesto" que estão com o status de "Manifesto Recebido"
+// Logic: Retornar os dados da coluna "ID_Manifesto" que estão com o status especificado
 export const fetchIdsByStatus = async (status: string): Promise<string[]> => {
   try {
     const { data, error } = await supabase
       .from('SMO_Sistema')
       .select('ID_Manifesto')
-      .eq('Status', status); // Expecting 'Manifesto Recebido'
+      .ilike('Status', `%${status}%`); // Changed to ilike for robustness
 
     if (error) {
         console.warn("Error fetching IDs from SMO_Sistema.", error);
@@ -164,9 +164,33 @@ export const fetchManifestosForEmployee = async (name: string): Promise<string[]
   }
 };
 
+// Fetch Manifestos for a specific CIA (Conferir Manifesto context)
+// Logic: Filter by CIA column in SMO_Operacional
+// Update: Query ID_Manifesto directly as the ID column, and use ilike for CIA to handle casing issues
+export const fetchManifestosByCIA = async (cia: string): Promise<string[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('SMO_Operacional')
+      .select('ID_Manifesto')
+      .ilike('CIA', cia); // Use ilike for case-insensitive matching
+
+    if (error) {
+         console.warn("Error fetching CIA manifestos from SMO_Operacional.", error);
+         return [];
+    }
+
+    if (!data) return [];
+
+    const uniqueIds = Array.from(new Set(data.map((item: any) => item['ID_Manifesto']))).filter(Boolean);
+    return uniqueIds.sort() as string[];
+  } catch (e) {
+    console.error("Unexpected error in fetchManifestosByCIA", e);
+    return [];
+  }
+};
+
 // --- HELPER FUNCTIONS (UNUSED IN LOGIC BUT KEPT FOR STRUCTURE IF NEEDED) ---
 export const fetchCIAs = async (): Promise<string[]> => { return []; };
-export const fetchManifestosByCIA = async (cia: string): Promise<string[]> => { return []; };
 export const fetchNamesByStatus = async (status: string): Promise<string[]> => { return []; };
 
 // --- SUBMIT ACTION ---
