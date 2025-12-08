@@ -167,11 +167,12 @@ export const fetchManifestosForEmployee = async (name: string): Promise<string[]
 // Fetch Manifestos for a specific CIA (Conferir Manifesto context)
 // Logic: Filter by CIA column in SMO_Operacional
 // Update: Query ID_Manifesto directly as the ID column, and use ilike for CIA to handle casing issues
+// Update 2: Filter out records where 'Ação' is 'Conferir Manifesto'
 export const fetchManifestosByCIA = async (cia: string): Promise<string[]> => {
   try {
     const { data, error } = await supabase
       .from('SMO_Operacional')
-      .select('ID_Manifesto')
+      .select('ID_Manifesto, Ação') // Select Action column to check status
       .ilike('CIA', cia); // Use ilike for case-insensitive matching
 
     if (error) {
@@ -181,7 +182,10 @@ export const fetchManifestosByCIA = async (cia: string): Promise<string[]> => {
 
     if (!data) return [];
 
-    const uniqueIds = Array.from(new Set(data.map((item: any) => item['ID_Manifesto']))).filter(Boolean);
+    // Filter logic: Only return items where Ação is NOT "Conferir Manifesto"
+    const filteredData = data.filter((item: any) => item['Ação'] !== 'Conferir Manifesto');
+
+    const uniqueIds = Array.from(new Set(filteredData.map((item: any) => item['ID_Manifesto']))).filter(Boolean);
     return uniqueIds.sort() as string[];
   } catch (e) {
     console.error("Unexpected error in fetchManifestosByCIA", e);
