@@ -7,10 +7,11 @@ interface CustomSelectProps {
   placeholder?: string;
   searchable?: boolean;
   disabled?: boolean;
+  theme?: 'red' | 'purple';
 }
 
-const ChevronDown = () => (
-  <svg width="12" height="12" viewBox="0 0 292.4 292.4" fill="#ee2536">
+const ChevronDown = ({ color }: { color: string }) => (
+  <svg width="12" height="12" viewBox="0 0 292.4 292.4" fill={color}>
     <path d="M287 69.4a17.6 17.6 0 0 0-13-5.4H18.4c-5 0-9.3 1.8-12.9 5.4A17.6 17.6 0 0 0 0 82.2c0 5 1.8 9.3 5.4 12.9l128 127.9c3.6 3.6 7.8 5.4 12.8 5.4s9.2-1.8 12.8-5.4L287 95c3.5-3.5 5.4-7.8 5.4-12.8 0-5-1.9-9.2-5.5-12.8z"/>
   </svg>
 );
@@ -21,11 +22,18 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
   onChange, 
   placeholder = "Selecione", 
   searchable = false,
-  disabled = false
+  disabled = false,
+  theme = 'red'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Theme Colors
+  const activeColor = theme === 'purple' ? '#50284f' : '#ee2f24';
+  const selectedBgClass = theme === 'purple' ? 'bg-[#f3e5f5]' : 'bg-[#fff0f1]';
+  const selectedTextClass = theme === 'purple' ? 'text-[#50284f]' : 'text-[#ee2f24]';
+  const hoverBgClass = theme === 'purple' ? 'hover:bg-[#f3e5f5] hover:text-[#50284f]' : 'hover:bg-[#fff0f1] hover:text-[#ee2f24]';
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -59,7 +67,8 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
     <div className="relative w-full text-left font-sans" ref={wrapperRef}>
       {/* Trigger Area */}
       <div 
-        className={`w-full p-[12px] mt-[5px] border rounded-[12px] text-[14px] bg-[#f0f2f5] shadow-sm flex items-center justify-between transition-all duration-300 ${disabled ? 'opacity-60 cursor-not-allowed border-[#e2e8f0]' : 'cursor-pointer border-[#cbd5e1] hover:border-[#94a3b8]'} ${isOpen ? 'border-[#ee2536] ring-1 ring-[#ee2536] ring-opacity-30' : ''}`}
+        className={`w-full p-[12px] mt-[5px] border rounded-[12px] text-[14px] bg-[#f0f2f5] shadow-sm flex items-center justify-between transition-all duration-300 ${disabled ? 'opacity-60 cursor-not-allowed border-[#e2e8f0]' : 'cursor-pointer border-[#cbd5e1] hover:border-[#94a3b8]'} ${isOpen ? 'ring-1 ring-opacity-30' : ''}`}
+        style={{ borderColor: isOpen ? activeColor : undefined, ['--tw-ring-color' as any]: activeColor }}
         onClick={() => !disabled && setIsOpen(!isOpen)}
       >
         {searchable ? (
@@ -84,7 +93,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
         )}
         
         <div className={`ml-2 flex-shrink-0 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`}>
-            <ChevronDown />
+            <ChevronDown color={activeColor} />
         </div>
       </div>
 
@@ -95,7 +104,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
                 filteredOptions.map((option, index) => (
                     <div 
                         key={index}
-                        className={`p-[12px_15px] text-left text-[14px] text-[#333] hover:bg-[#fff0f1] hover:text-[#ee2536] cursor-pointer transition-colors border-b border-gray-100 last:border-none ${option === value ? 'bg-[#fff0f1] font-bold text-[#ee2536]' : ''}`}
+                        className={`p-[12px_15px] text-left text-[14px] text-[#333] cursor-pointer transition-colors border-b border-gray-100 last:border-none ${hoverBgClass} ${option === value ? `${selectedBgClass} font-bold ${selectedTextClass}` : ''}`}
                         onClick={() => handleSelect(option)}
                     >
                         {option}

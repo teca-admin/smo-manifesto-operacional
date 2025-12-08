@@ -1,3 +1,4 @@
+
 import { supabase } from '../supabaseClient';
 
 // --- CHECK CONNECTION ---
@@ -15,6 +16,51 @@ export const checkConnection = async (): Promise<{ success: boolean; message: st
     return { success: true, message: 'Conectado com sucesso' };
   } catch (e: any) {
     return { success: false, message: e.message || "Erro desconhecido de conexão" };
+  }
+};
+
+// --- AUTHENTICATION ---
+// Verify CIA credentials
+export const authenticateCIA = async (username: string, password: string): Promise<boolean> => {
+  try {
+    const { data, error } = await supabase
+      .from('Cadastro_de_Perfil_CIA')
+      .select('id')
+      .eq('CIA', username)
+      .eq('Senha', password)
+      .maybeSingle();
+
+    if (error) {
+        console.warn("Auth error:", error);
+        return false;
+    }
+    
+    return !!data;
+  } catch (e) {
+    console.error("Auth exception:", e);
+    return false;
+  }
+};
+
+// Fetch CIA Users for Login Dropdown
+export const fetchCIAUsers = async (): Promise<string[]> => {
+  try {
+    const { data, error } = await supabase
+      .from('Cadastro_de_Perfil_CIA')
+      .select('CIA');
+
+    if (error) {
+      console.warn("Error fetching CIA users.", error);
+      return [];
+    }
+    if (!data) return [];
+    
+    // Extract unique users
+    const uniqueUsers = Array.from(new Set(data.map((item: any) => item['CIA']))).filter(Boolean);
+    return uniqueUsers.sort() as string[];
+  } catch (e) {
+    console.error("Unexpected error in fetchCIAUsers", e);
+    return [];
   }
 };
 
@@ -43,8 +89,8 @@ export const fetchNames = async (status?: string): Promise<string[]> => {
   }
 };
 
-// --- FINALIZAR MANIFESTO: NAMES ---
-// Prompt: Ação: Finalizar Manifesto | Campo: Nome | Table: SMO_Sistema
+// --- FINALIZAR/CONFERIR MANIFESTO: NAMES ---
+// Prompt: Ação: Conferir Manifesto (e Finalizar Manifesto) | Campo: Nome | Table: SMO_Sistema
 // Logic: =SE([@Status]="Manifesto Iniciado";[@[Usuario_Operação]];"")
 // CORREÇÃO: Usando .ilike para ignorar espaços em branco (ex: "  Manifesto Iniciado") que existem no banco.
 export const fetchNamesForFinalization = async (): Promise<string[]> => {
@@ -95,7 +141,7 @@ export const fetchIdsByStatus = async (status: string): Promise<string[]> => {
   }
 };
 
-// Fetch IDs for a specific employee (Finalizar Manifesto context)
+// Fetch IDs for a specific employee (Finalizar/Conferir Manifesto context)
 // Logic: Filter by Name AND Status='Manifesto Iniciado' (ignoring spaces)
 export const fetchManifestosForEmployee = async (name: string): Promise<string[]> => {
   try {
@@ -144,7 +190,14 @@ export const submitManifestoAction = async (
 
     // 2. Update SMO_Sistema Status
     if (!error) {
-        const newStatus = action === 'Iniciar Manifesto' ? 'Manifesto Iniciado' : 'Manifesto Finalizado';
+        let newStatus = '';
+        if (action === 'Iniciar Manifesto') {
+            newStatus = 'Manifesto Iniciado';
+        } else if (action === 'Finalizar Manifesto') {
+            newStatus = 'Manifesto Finalizado';
+        } else if (action === 'Conferir Manifesto') {
+            newStatus = 'Conferência Concluída'; 
+        }
         
         await supabase
           .from('SMO_Sistema')
@@ -176,6 +229,13 @@ export const submitManifestoAction = async (
             nome: name,
             Manifesto_Finalizado: formattedDate
         };
+    } else if (action === 'Conferir Manifesto') {
+        webhookBody = {
+            "ação": action,
+            id_manifesto: id,
+            nome: name,
+            Conferencia_Concluida: formattedDate
+        };
     }
 
     if (Object.keys(webhookBody).length > 0) {
@@ -194,6 +254,8 @@ export const submitManifestoAction = async (
         return { success: true, message: 'Manifesto iniciado com sucesso!' };
     } else if (action === 'Finalizar Manifesto') {
         return { success: true, message: 'Manifesto finalizado com sucesso!' };
+    } else if (action === 'Conferir Manifesto') {
+        return { success: true, message: 'Conferência concluída com sucesso!' };
     } else {
         return { success: true, message: 'Registro salvo com sucesso!' };
     }

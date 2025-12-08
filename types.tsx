@@ -1,3 +1,4 @@
+
 export interface Manifesto {
   id: string;
   status: string;
@@ -5,7 +6,7 @@ export interface Manifesto {
   cia?: string;
 }
 
-export type ActionType = '' | 'Iniciar Manifesto' | 'Finalizar Manifesto';
+export type ActionType = '' | 'Iniciar Manifesto' | 'Finalizar Manifesto' | 'Conferir Manifesto';
 
 export interface FeedbackMessage {
   text: string;

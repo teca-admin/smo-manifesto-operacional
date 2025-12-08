@@ -13,14 +13,59 @@
         padding: 0;
         overflow-x: hidden;
       }
+      
+      /* Base background color on HTML to ensure it's always white behind fade effects */
+      html {
+        background-color: #ffffff;
+      }
 
       body {
         font-family: 'Arial', sans-serif;
-        background: linear-gradient(135deg, #ee2536 0%, #ff6f61 100%);
+        background: transparent;
         display: flex;
         justify-content: center;
         align-items: center;
         min-height: 100vh;
+        position: relative;
+      }
+
+      /* Gradient Layer for WFS (Red) */
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #ee2f24, #ff6f61);
+        opacity: 0;
+        transition: opacity 0.8s ease-in-out;
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      /* Gradient Layer for CIA (Purple) */
+      body::after {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #50284f, #7a3e79);
+        opacity: 0;
+        transition: opacity 0.8s ease-in-out;
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      /* Active States - Trigger Fade In */
+      body.wfs-mode::before {
+        opacity: 1;
+      }
+
+      body.cia-mode::after {
+        opacity: 1;
       }
       
       #root {
@@ -29,6 +74,8 @@
         align-items: center;
         width: 100%;
         padding: 20px;
+        position: relative;
+        z-index: 1; /* Content sits on top of background layers */
       }
 
       /* Custom animations */
