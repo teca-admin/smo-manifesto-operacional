@@ -310,11 +310,27 @@ const App: React.FC = () => {
     
     const isBatchMode = (action === 'Conferir Manifesto' && userType === 'CIA');
 
-    if (!isBatchMode && !selectedManifestoId && !isBatchMode) {
-      setFeedback({ text: 'Preencha todos os campos.', type: 'error' });
+    // --- Validations ---
+    
+    // 1. Strict Name Validation (WFS Actions)
+    if ((action === 'Iniciar Manifesto' || action === 'Finalizar Manifesto') && (!name || name.trim() === '')) {
+        setFeedback({ text: 'ERRO: É obrigatório atribuir o manifesto a alguém (selecionar Nome).', type: 'error' });
+        return;
+    }
+
+    // 2. Generic Name Validation
+    if (!submissionName || submissionName.trim() === '') {
+        setFeedback({ text: 'Por favor, selecione ou digite o nome do responsável.', type: 'error' });
+        return;
+    }
+
+    // 3. Validate Manifesto Selection (if not batch mode)
+    if (!isBatchMode && !selectedManifestoId) {
+      setFeedback({ text: 'Selecione um manifesto para prosseguir.', type: 'error' });
       return;
     }
     
+    // 4. Validate Batch Mode
     if (isBatchMode && idsList.length === 0) {
         setFeedback({ text: 'Nenhum manifesto disponível para processar.', type: 'error' });
         return;
@@ -388,7 +404,7 @@ const App: React.FC = () => {
                           value={ciaPassword}
                           onChange={(e) => setCiaPassword(e.target.value)}
                           onKeyDown={(e) => e.key === 'Enter' && handleCIALoginSubmit()}
-                          className="w-full p-[12px] border border-[#cbd5e1] rounded-[12px] text-[14px] text-[#333] bg-[#f0f2f5] outline-none focus:border-[#50284f] transition-colors pr-[40px]"
+                          className="w-full p-[12px] border border-[#cbd5e1] rounded-[12px] text-[14px] text-center outline-none focus:border-[#50284f] bg-[#f0f2f5] pr-[40px] text-[#333]"
                       />
                       <button 
                           type="button"
@@ -490,7 +506,69 @@ const App: React.FC = () => {
         )}
       </div>
 
-      {(action === 'Iniciar Manifesto' || action === 'Conferir Manifesto' || action === 'Conferência Concluída') && (
+      {/* RENDER FOR CONFERÊNCIA CONCLUÍDA (CIA) - CARD VIEW */}
+      {action === 'Conferência Concluída' && userType === 'CIA' && (
+        <div className="animate-fadeIn mt-[15px]">
+             <h3 className="text-[#333] font-bold text-[14px] text-left mb-[8px]">Manifestos em Conferência</h3>
+             <div className="bg-[#e8f5e9] border border-[#c8e6c9] text-[#2e7d32] p-[10px] rounded-[8px] mb-[15px] text-[12px] font-bold text-center">
+                 Total de manifestos em conferência: {idsList.length} | Processados: {processedCount}
+             </div>
+             
+             <div className="overflow-y-auto custom-scrollbar max-h-[350px]">
+                 {idsList.length === 0 ? (
+                    <div className="text-[#6c757d] italic text-center p-[30px] text-[13px] border-2 border-dashed border-gray-200 rounded-[12px]">
+                        Nenhum manifesto pendente
+                    </div>
+                 ) : (
+                    idsList.map(item => (
+                        <div key={item.id} className="bg-white border border-[#e0e0e0] rounded-[12px] p-[15px] mb-[12px] shadow-sm text-left relative transition-all hover:shadow-md">
+                            <div className="flex justify-between items-center mb-[10px]">
+                                <span className="font-bold text-[#50284f] text-[15px]">{item.id}</span>
+                                <span className="bg-[#fff3cd] text-[#856404] text-[10px] font-bold px-[8px] py-[3px] rounded-[4px] border border-[#ffeeba]">
+                                    PENDENTE
+                                </span>
+                            </div>
+                            
+                            <div className="bg-[#f8f9fa] rounded-[8px] p-[10px] mb-[12px] border border-gray-100 flex gap-3">
+                                <div className="flex-1">
+                                    <label className="block text-[10px] font-bold text-[#888] mb-[2px] uppercase">CARGAS (IN/H)</label>
+                                    <div className="w-full bg-white border border-[#ddd] rounded-[6px] p-[6px] text-center font-bold text-[#333] text-[14px]">
+                                        {item.cargasInh || '0'}
+                                    </div>
+                                </div>
+                                <div className="flex-1">
+                                    <label className="block text-[10px] font-bold text-[#888] mb-[2px] uppercase">CARGAS (IZ)</label>
+                                    <div className="w-full bg-white border border-[#ddd] rounded-[6px] p-[6px] text-center font-bold text-[#333] text-[14px]">
+                                        {item.cargasIz || '0'}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-2 mt-[5px]">
+                                <button 
+                                    onClick={() => handleInlineSubmit('Conferência Concluída', item.id)}
+                                    disabled={processingItems.includes(item.id)}
+                                    className="flex-1 bg-[#28a745] hover:bg-[#218838] text-white font-bold py-[8px] rounded-[8px] text-[13px] shadow-sm transition-colors disabled:opacity-60"
+                                >
+                                    {processingItems.includes(item.id) ? '...' : 'Completo'}
+                                </button>
+                                <button 
+                                    onClick={() => handlePendenteClick(item.id)}
+                                    disabled={processingItems.includes(item.id)}
+                                    className="flex-1 bg-[#fd7e14] hover:bg-[#e8710e] text-white font-bold py-[8px] rounded-[8px] text-[13px] shadow-sm transition-colors disabled:opacity-60"
+                                >
+                                    Pendente
+                                </button>
+                            </div>
+                        </div>
+                    ))
+                 )}
+             </div>
+        </div>
+      )}
+
+      {/* RENDER FOR OTHER ACTIONS */}
+      {(action === 'Iniciar Manifesto' || action === 'Conferir Manifesto') && (
         <div className="animate-fadeIn">
             {action === 'Iniciar Manifesto' && (
                 <div className="mt-[15px]">
@@ -506,72 +584,17 @@ const App: React.FC = () => {
                 </div>
             )}
 
-            {action === 'Conferência Concluída' && userType === 'CIA' && (
-                <div className="mt-[20px] mb-[10px] animate-fadeIn">
-                    <h3 className="text-left font-bold text-[#444] text-[14px] mb-[10px]">Manifestos em Conferência</h3>
-                    <div className="bg-[#e8f5e9] border border-[#c8e6c9] rounded-[10px] p-[10px] flex justify-center items-center">
-                        <span className="text-[#2e7d32] font-bold text-[13px]">
-                            Total de manifestos em conferência: {idsList.length} | Processados: {processedCount}
-                        </span>
-                    </div>
-                </div>
-            )}
-
-            <div className={userType === 'CIA' && action === 'Conferência Concluída' ? "" : "mt-[15px]"}>
-                {!(userType === 'CIA' && action === 'Conferência Concluída') && (
-                    <label className="block mb-[5px] font-bold text-[#444] text-[14px] text-left">ID Manifesto</label>
-                )}
+            <div className="mt-[15px]">
+                <label className="block mb-[5px] font-bold text-[#444] text-[14px] text-left">ID Manifesto</label>
                 
-                <div className={`overflow-y-auto custom-scrollbar ${userType === 'CIA' && action === 'Conferência Concluída' ? 'max-h-[500px] p-[2px]' : 'max-h-[350px] bg-[#f8f9fa] border border-[#dee2e6] rounded-[12px] p-[10px]'}`}>
+                <div className="overflow-y-auto custom-scrollbar max-h-[350px] bg-[#f8f9fa] border border-[#dee2e6] rounded-[12px] p-[10px]">
                      {idsList.length === 0 ? (
                         <div className="text-[#6c757d] italic text-center p-[20px] text-[13px]">
                             {connectionError ? 'Sem conexão' : 'Nenhum manifesto disponível'}
                         </div>
                      ) : (
                          idsList.map(item => {
-                            if (action === 'Conferência Concluída' && userType === 'CIA') {
-                                const isProcessing = processingItems.includes(item.id);
-                                return (
-                                    <div key={item.id} className="w-full flex flex-col p-[15px] my-[10px] border rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.05)] border-[#e0e0e0] relative animate-fadeIn transition-transform hover:scale-[1.01]">
-                                        <div className="w-full flex justify-between items-center mb-4">
-                                            <span className="font-bold text-[16px] text-[#50284f]">{item.id}</span>
-                                            <span className="bg-[#fff8e1] text-[#f57f17] text-[11px] font-bold px-3 py-1 rounded-[6px] uppercase tracking-wider">
-                                                Pendente
-                                            </span>
-                                        </div>
-                                        <div className="flex gap-3 mb-5 bg-[#f8f9fa] p-3 rounded-[10px] border border-gray-100">
-                                            <div className="flex-1 flex flex-col items-center">
-                                                <span className="text-[11px] font-bold text-[#6c757d] mb-2 uppercase tracking-tight">Cargas (IN/H)</span>
-                                                <div className="w-full bg-white border border-[#ced4da] rounded-[8px] py-2 text-center font-bold text-[#333] shadow-sm text-[14px]">
-                                                    {item.cargasInh || '0'}
-                                                </div>
-                                            </div>
-                                            <div className="flex-1 flex flex-col items-center">
-                                                <span className="text-[11px] font-bold text-[#6c757d] mb-2 uppercase tracking-tight">Cargas (IZ)</span>
-                                                <div className="w-full bg-white border border-[#ced4da] rounded-[8px] py-2 text-center font-bold text-[#333] shadow-sm text-[14px]">
-                                                    {item.cargasIz || '0'}
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div className="flex gap-3">
-                                            <button
-                                                onClick={() => handleInlineSubmit('Conferência Concluída', item.id)}
-                                                disabled={isProcessing}
-                                                className={`flex-1 py-3 bg-[#28a745] text-white font-bold rounded-[8px] text-[14px] shadow-sm transition-all active:scale-[0.98] border border-[#28a745] disabled:opacity-70 disabled:cursor-wait ${isProcessing ? 'animate-pulse' : 'hover:bg-[#218838]'}`}
-                                            >
-                                                {isProcessing ? 'Sal...' : 'Completo'}
-                                            </button>
-                                            <button
-                                                onClick={() => handlePendenteClick(item.id)}
-                                                disabled={isProcessing}
-                                                className="flex-1 py-3 bg-[#fd7e14] text-white font-bold rounded-[8px] text-[14px] shadow-sm hover:bg-[#e8710e] transition-all active:scale-[0.98] border border-[#fd7e14] disabled:opacity-60"
-                                            >
-                                                Pendente
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            } else if (action === 'Conferir Manifesto' && userType === 'CIA') {
+                            if (action === 'Conferir Manifesto' && userType === 'CIA') {
                                 return (
                                     <div key={item.id} className="w-full p-[12px] my-[6px] bg-white border border-[#e0e0e0] rounded-[10px] text-[13px] text-left font-medium shadow-sm">
                                         <span className="font-bold text-[#333]">{item.id}</span>
@@ -592,7 +615,7 @@ const App: React.FC = () => {
                                             <span className="font-bold">{item.id}</span>
                                             {selectedManifestoId === item.id && (
                                                 <span className="bg-white/25 text-white text-[10px] uppercase font-bold px-[8px] py-[2px] rounded-[6px] border border-white/40 tracking-wide">
-                                                    {action === 'Iniciar Manifesto' ? 'Iniciar' : 'Ver'}
+                                                    {action === 'Iniciar Manifesto' ? 'Iniciar' : 'Selecionado'}
                                                 </span>
                                             )}
                                         </div>
@@ -654,6 +677,7 @@ const App: React.FC = () => {
 
       {action && (
         userType === 'CIA' ? (
+            // CIA BUTTON: Only for Conferir Manifesto batch processing. Conferência Concluída uses inline buttons.
             action === 'Conferir Manifesto' ? (
                 <button 
                     id="btnProcessar"

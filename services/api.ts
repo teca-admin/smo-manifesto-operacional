@@ -168,18 +168,10 @@ export const fetchManifestosByCIA = async (cia: string, viewMode: 'pending' | 'c
         const acao = acaoRaw ? acaoRaw.toString().trim().toLowerCase() : '';
         
         if (viewMode === 'pending') {
-             // Show if NOT processed yet (Action is empty or not in the processed list)
-             const isProcessed = acao === 'conferir manifesto' || 
-                                 acao === 'conferência concluída' || 
-                                 acao === 'conferencia concluida' ||
-                                 acao === 'conferência encerrada' ||
-                                 acao === 'conferencia encerrada' ||
-                                 acao === 'conferência em confinamento' ||
-                                 acao === 'pendente' ||
-                                 acao === 'manifesto completo';
-             return !isProcessed;
+             // "Conferir Manifesto" > Só aparece se a ação for "Finalizar Manifesto"
+             return acao === 'finalizar manifesto';
         } else {
-             // Show ONLY if status is EXACTLY 'conferir manifesto'
+             // "Conferência Concluída" > Só aparece se a ação for "Conferir Manifesto"
              return acao === 'conferir manifesto';
         }
     });
