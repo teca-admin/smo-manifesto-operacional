@@ -25,8 +25,8 @@ import CustomSelect from './components/CustomSelect';
 
 // Icons
 const RefreshIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1 18.8 4.3"/>
+  <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
   </svg>
 );
 
@@ -77,6 +77,8 @@ const App: React.FC = () => {
   
   // Dashboard State (CIA)
   const [processedCount, setProcessedCount] = useState<number>(0);
+  // Per-item processing state for inline actions
+  const [processingItems, setProcessingItems] = useState<string[]>([]);
   
   // Pending Modal State
   const [pendingItem, setPendingItem] = useState<string | null>(null);
@@ -165,6 +167,8 @@ const App: React.FC = () => {
               fetchManifestosForEmployee(name).then(setManifestosForEmployee);
             }
           } else if (action === 'Conferir Manifesto' || action === 'Conferência Concluída') {
+            // For conference, we rely more on optimistic updates and local state to prevent UI jumping
+            // but we still listen for external changes
             loadIdsForConference();
           }
         }
@@ -184,6 +188,7 @@ const App: React.FC = () => {
     setSelectedManifestoId('');
     setManifestosForEmployee([]);
     setProcessedCount(0);
+    setProcessingItems([]);
     setPendingItem(null);
     setPendingInhValue('');
     setPendingIzValue('');
@@ -255,26 +260,35 @@ const App: React.FC = () => {
 
   // Handle Inline Submit for Conferência Concluída items
   const handleInlineSubmit = async (itemAction: ActionType, id: string, reason?: string) => {
-    if (loading) return;
+    // Prevent double submission for the same item
+    if (processingItems.includes(id)) return;
     
-    setLoading(true);
-    setLoadingMessage('Salvando...');
+    // Add to processing list (Local loading state)
+    setProcessingItems(prev => [...prev, id]);
     setFeedback({ text: '', type: '' });
     
+    // Call API
     const result = await submitManifestoAction(itemAction, id, currentUser, reason);
     
-    setLoading(false);
+    // Remove from processing list
+    setProcessingItems(prev => prev.filter(pid => pid !== id));
     
     if (result.success) {
-        setFeedback({ text: result.message, type: 'success' });
         setProcessedCount(prev => prev + 1);
         
-        setPendingItem(null);
-        setPendingInhValue('');
-        setPendingIzValue('');
+        // Close modal if it was open for this item
+        if (pendingItem === id) {
+            setPendingItem(null);
+            setPendingInhValue('');
+            setPendingIzValue('');
+        }
 
-        loadIdsForConference(); 
-        setTimeout(() => setFeedback({ text: '', type: '' }), 2000);
+        // OPTIMISTIC UPDATE: Remove from list immediately
+        setIdsList(prev => prev.filter(item => item.id !== id));
+
+        // We DO NOT call loadIdsForConference() here to avoid race conditions.
+        // We rely on the optimistic update to update the UI instantly.
+        // The background Realtime subscription will eventually sync if needed.
     } else {
         setFeedback({ text: result.message, type: 'error' });
     }
@@ -516,6 +530,7 @@ const App: React.FC = () => {
                      ) : (
                          idsList.map(item => {
                             if (action === 'Conferência Concluída' && userType === 'CIA') {
+                                const isProcessing = processingItems.includes(item.id);
                                 return (
                                     <div key={item.id} className="w-full flex flex-col p-[15px] my-[10px] border rounded-[12px] bg-white shadow-[0_2px_8px_rgba(0,0,0,0.05)] border-[#e0e0e0] relative animate-fadeIn transition-transform hover:scale-[1.01]">
                                         <div className="w-full flex justify-between items-center mb-4">
@@ -541,13 +556,15 @@ const App: React.FC = () => {
                                         <div className="flex gap-3">
                                             <button
                                                 onClick={() => handleInlineSubmit('Conferência Concluída', item.id)}
-                                                className="flex-1 py-3 bg-[#28a745] text-white font-bold rounded-[8px] text-[14px] shadow-sm hover:bg-[#218838] transition-all active:scale-[0.98] border border-[#28a745]"
+                                                disabled={isProcessing}
+                                                className={`flex-1 py-3 bg-[#28a745] text-white font-bold rounded-[8px] text-[14px] shadow-sm transition-all active:scale-[0.98] border border-[#28a745] disabled:opacity-70 disabled:cursor-wait ${isProcessing ? 'animate-pulse' : 'hover:bg-[#218838]'}`}
                                             >
-                                                Completo
+                                                {isProcessing ? 'Sal...' : 'Completo'}
                                             </button>
                                             <button
                                                 onClick={() => handlePendenteClick(item.id)}
-                                                className="flex-1 py-3 bg-[#fd7e14] text-white font-bold rounded-[8px] text-[14px] shadow-sm hover:bg-[#e8710e] transition-all active:scale-[0.98] border border-[#fd7e14]"
+                                                disabled={isProcessing}
+                                                className="flex-1 py-3 bg-[#fd7e14] text-white font-bold rounded-[8px] text-[14px] shadow-sm hover:bg-[#e8710e] transition-all active:scale-[0.98] border border-[#fd7e14] disabled:opacity-60"
                                             >
                                                 Pendente
                                             </button>
@@ -774,12 +791,16 @@ const App: React.FC = () => {
                       <button 
                           onClick={() => {
                             const formattedObservation = `Pendência Registrada: Cargas (IN/H): ${pendingInhValue || '0'} | Cargas (IZ): ${pendingIzValue || '0'}`;
-                            handleInlineSubmit('Pendente', pendingItem, formattedObservation);
+                            const itemId = pendingItem;
+                            // Optimistically close modal
+                            setPendingItem(null); 
+                            // Call submit
+                            handleInlineSubmit('Pendente', itemId!, formattedObservation);
                           }}
-                          disabled={!pendingInhValue && !pendingIzValue}
+                          disabled={(!pendingInhValue && !pendingIzValue) || processingItems.includes(pendingItem!)}
                           className="flex-1 p-[12px] bg-[#fd7e14] text-white font-bold rounded-[10px] shadow-md hover:bg-[#e8710e] disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                          Confirmar
+                          {processingItems.includes(pendingItem!) ? 'Processando...' : 'Confirmar'}
                       </button>
                   </div>
               </div>

@@ -167,17 +167,20 @@ export const fetchManifestosByCIA = async (cia: string, viewMode: 'pending' | 'c
         const acaoRaw = item['Ação'];
         const acao = acaoRaw ? acaoRaw.toString().trim().toLowerCase() : '';
         
-        const isCompleted = acao === 'conferir manifesto' || 
-                            acao === 'conferência concluída' || 
-                            acao === 'conferencia concluida' ||
-                            acao === 'pendente';
-
         if (viewMode === 'pending') {
-             // Show if NOT completed
-             return !isCompleted;
+             // Show if NOT processed yet (Action is empty or not in the processed list)
+             const isProcessed = acao === 'conferir manifesto' || 
+                                 acao === 'conferência concluída' || 
+                                 acao === 'conferencia concluida' ||
+                                 acao === 'conferência encerrada' ||
+                                 acao === 'conferencia encerrada' ||
+                                 acao === 'conferência em confinamento' ||
+                                 acao === 'pendente' ||
+                                 acao === 'manifesto completo';
+             return !isProcessed;
         } else {
-             // Show if IS completed
-             return isCompleted;
+             // Show ONLY if status is EXACTLY 'conferir manifesto'
+             return acao === 'conferir manifesto';
         }
     });
 
@@ -263,19 +266,31 @@ export const submitManifestoAction = async (
             newStatus = 'Manifesto Pendente';
         }
         
-        await supabase
-          .from('SMO_Sistema')
-          .update({ 
-              Status: newStatus, 
-              "Usuario_Operação": name 
-          }) 
-          .eq('ID_Manifesto', id);
+        if (newStatus) {
+            await supabase
+            .from('SMO_Sistema')
+            .update({ 
+                Status: newStatus, 
+                "Usuario_Operação": name 
+            }) 
+            .eq('ID_Manifesto', id);
+        }
         
         // Update SMO_Operacional Ação
-        if (action === 'Conferir Manifesto' || action === 'Conferência Concluída' || action === 'Pendente') {
+        // Optimized to prevent double writes and race conditions
+        let operacionalAction = '';
+        if (action === 'Pendente') {
+            operacionalAction = 'Pendente';
+        } else if (action === 'Conferir Manifesto') {
+            operacionalAction = 'Conferir Manifesto';
+        } else if (action === 'Conferência Concluída') {
+            operacionalAction = 'Conferência Concluída';
+        }
+
+        if (operacionalAction) {
             await supabase
                 .from('SMO_Operacional')
-                .update({ 'Ação': action === 'Pendente' ? 'Pendente' : 'Conferir Manifesto' }) 
+                .update({ 'Ação': operacionalAction }) 
                 .eq('ID_Manifesto', id);
         }
     }
@@ -311,7 +326,7 @@ export const submitManifestoAction = async (
             "ação": action,
             id_manifesto: id,
             nome: name,
-            "Conferir Manifesto": formattedDate
+            "Conferir Manifesto": formattedDate // Keeping key as requested
         };
     } else if (action === 'Pendente') {
         webhookBody = {
