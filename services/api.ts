@@ -204,7 +204,7 @@ export const submitManifestoAction = async (
   action: string, 
   id: string, 
   name: string,
-  extraData?: string
+  extraData?: string | { inh: string; iz: string; obs: string }
 ): Promise<{ success: boolean; message: string }> => {
   try {
     // Validation for WFS actions
@@ -232,6 +232,15 @@ export const submitManifestoAction = async (
         }
     } 
 
+    // Prepare observation for DB (human readable string)
+    let dbObservation = '';
+    if (action === 'Pendente' && typeof extraData === 'object') {
+        const obsPart = extraData.obs ? ` | Obs: ${extraData.obs}` : '';
+        dbObservation = `Pendência Registrada: Cargas (IN/H): ${extraData.inh} | Cargas (IZ): ${extraData.iz}${obsPart}`;
+    } else if (typeof extraData === 'string') {
+        dbObservation = extraData;
+    }
+
     // 1. Insert Log
     const { error } = await supabase
       .from('registros_operacionais')
@@ -240,7 +249,7 @@ export const submitManifestoAction = async (
           manifesto_id: id, 
           acao: action, 
           nome: name, 
-          observacao: extraData,
+          observacao: dbObservation,
           created_at: new Date().toISOString() 
         }
       ]);
@@ -269,7 +278,6 @@ export const submitManifestoAction = async (
         }
         
         // Update SMO_Operacional Ação
-        // Optimized to prevent double writes and race conditions
         let operacionalAction = '';
         if (action === 'Pendente') {
             operacionalAction = 'Pendente';
@@ -318,16 +326,30 @@ export const submitManifestoAction = async (
             "ação": action,
             id_manifesto: id,
             nome: name,
-            "Conferir Manifesto": formattedDate // Keeping key as requested
+            "Conferir Manifesto": formattedDate 
         };
     } else if (action === 'Pendente') {
-        webhookBody = {
-            "ação": action,
-            id_manifesto: id,
-            nome: name,
-            "Manifesto_Pendente": formattedDate,
-            "observacao": extraData || ""
-        };
+        // Structured data for N8N
+        if (typeof extraData === 'object') {
+            webhookBody = {
+                "ação": action,
+                id_manifesto: id,
+                nome: name,
+                "Manifesto_Pendente": formattedDate,
+                "PendênciaCargas (IN/H)": extraData.inh,
+                "PendênciaCargas (IZ)": extraData.iz,
+                "observacao": extraData.obs
+            };
+        } else {
+            // Fallback for string
+            webhookBody = {
+                "ação": action,
+                id_manifesto: id,
+                nome: name,
+                "Manifesto_Pendente": formattedDate,
+                "observacao": extraData || ""
+            };
+        }
     }
 
     if (Object.keys(webhookBody).length > 0) {

@@ -84,6 +84,7 @@ const App: React.FC = () => {
   const [pendingItem, setPendingItem] = useState<string | null>(null);
   const [pendingInhValue, setPendingInhValue] = useState<string>('');
   const [pendingIzValue, setPendingIzValue] = useState<string>('');
+  const [pendingObservation, setPendingObservation] = useState<string>('');
   
   // Connection State
   const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -192,6 +193,7 @@ const App: React.FC = () => {
     setPendingItem(null);
     setPendingInhValue('');
     setPendingIzValue('');
+    setPendingObservation('');
 
     if (action === 'Iniciar Manifesto') {
       loadNames();
@@ -259,7 +261,11 @@ const App: React.FC = () => {
   };
 
   // Handle Inline Submit for Conferência Concluída items
-  const handleInlineSubmit = async (itemAction: ActionType, id: string, reason?: string) => {
+  const handleInlineSubmit = async (
+      itemAction: ActionType, 
+      id: string, 
+      reason?: string | { inh: string; iz: string; obs: string }
+    ) => {
     // Prevent double submission for the same item
     if (processingItems.includes(id)) return;
     
@@ -268,6 +274,7 @@ const App: React.FC = () => {
     setFeedback({ text: '', type: '' });
     
     // Call API
+    // @ts-ignore
     const result = await submitManifestoAction(itemAction, id, currentUser, reason);
     
     // Remove from processing list
@@ -281,14 +288,11 @@ const App: React.FC = () => {
             setPendingItem(null);
             setPendingInhValue('');
             setPendingIzValue('');
+            setPendingObservation('');
         }
 
         // OPTIMISTIC UPDATE: Remove from list immediately
         setIdsList(prev => prev.filter(item => item.id !== id));
-
-        // We DO NOT call loadIdsForConference() here to avoid race conditions.
-        // We rely on the optimistic update to update the UI instantly.
-        // The background Realtime subscription will eventually sync if needed.
     } else {
         setFeedback({ text: result.message, type: 'error' });
     }
@@ -298,6 +302,7 @@ const App: React.FC = () => {
       setPendingItem(id);
       setPendingInhValue('');
       setPendingIzValue('');
+      setPendingObservation('');
   };
 
   const handleSubmit = async (overrideAction?: ActionType) => {
@@ -731,35 +736,27 @@ const App: React.FC = () => {
       {pendingItem && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fadeIn p-4">
               <div className="bg-white rounded-[20px] shadow-2xl w-full max-w-[360px] p-[25px] relative animate-slideDown">
-                  <h3 className="text-[#50284f] text-[18px] font-bold mb-[15px] text-center border-b pb-2">
+                  <h3 className="text-[#50284f] text-[18px] font-bold mb-[20px] text-center border-b border-gray-100 pb-3">
                       Reportar Pendência
                   </h3>
-                  <div className="bg-[#f8f9fa] rounded-[10px] p-[10px] mb-[15px] border border-gray-100 text-[13px]">
-                      <div className="flex justify-between mb-1">
-                          <span className="font-bold text-[#666]">ID:</span>
-                          <span className="font-bold text-[#333]">{pendingItem}</span>
-                      </div>
-                      {(() => {
-                          const item = idsList.find(i => i.id === pendingItem);
-                          if (!item) return null;
-                          return (
-                            <div className="flex gap-2 mt-2">
-                                <div className="flex-1 bg-white border p-2 rounded text-center">
-                                    <div className="text-[10px] text-[#888] font-bold uppercase">Cargas (IN/H)</div>
-                                    <div className="font-bold text-[#333]">{item.cargasInh || '0'}</div>
-                                </div>
-                                <div className="flex-1 bg-white border p-2 rounded text-center">
-                                    <div className="text-[10px] text-[#888] font-bold uppercase">Cargas (IZ)</div>
-                                    <div className="font-bold text-[#333]">{item.cargasIz || '0'}</div>
-                                </div>
-                            </div>
-                          );
-                      })()}
-                  </div>
-                  <label className="block mb-[5px] font-bold text-[#444] text-[14px] text-left">Qual a pendência?</label>
                   
-                  <div className="flex gap-3 mb-[20px]">
+                  {/* Info Block */}
+                  <div className="bg-[#f8f9fa] rounded-[10px] p-[12px] mb-[20px] border border-gray-100 text-[13px] shadow-inner">
+                      <div className="flex justify-between items-center mb-2">
+                          <span className="font-bold text-[#666]">Manifesto:</span>
+                          <span className="font-bold text-[#333] bg-white px-2 py-0.5 rounded border border-gray-200">{pendingItem}</span>
+                      </div>
+                      <div className="text-[11px] text-center text-gray-500 italic mt-1">
+                          Valores máximos de referência acima
+                      </div>
+                  </div>
+
+                  {/* Input Fields */}
+                  <div className="flex gap-4 mb-[20px]">
                       <div className="flex-1">
+                          <label className="block text-[12px] font-bold text-[#666] mb-1.5 uppercase tracking-wide">
+                              Cargas (IN/H)
+                          </label>
                           <input
                               type="number"
                               value={pendingInhValue}
@@ -777,11 +774,14 @@ const App: React.FC = () => {
                                     }
                                   }
                               }}
-                              placeholder="CARGAS (IN/H)"
-                              className="w-full p-[12px] border border-[#cbd5e1] rounded-[12px] text-[14px] text-center outline-none focus:border-[#fd7e14] bg-[#fff] text-black placeholder:text-gray-500"
+                              placeholder="0"
+                              className="w-full p-[12px] border border-[#cbd5e1] rounded-[12px] text-[16px] font-bold text-center outline-none focus:border-[#fd7e14] focus:ring-1 focus:ring-[#fd7e14] bg-white text-black transition-all"
                           />
                       </div>
                       <div className="flex-1">
+                          <label className="block text-[12px] font-bold text-[#666] mb-1.5 uppercase tracking-wide">
+                              Cargas (IZ)
+                          </label>
                           <input
                               type="number"
                               value={pendingIzValue}
@@ -799,30 +799,51 @@ const App: React.FC = () => {
                                     }
                                   }
                               }}
-                              placeholder="CARGAS (IZ)"
-                              className="w-full p-[12px] border border-[#cbd5e1] rounded-[12px] text-[14px] text-center outline-none focus:border-[#fd7e14] bg-[#fff] text-black placeholder:text-gray-500"
+                              placeholder="0"
+                              className="w-full p-[12px] border border-[#cbd5e1] rounded-[12px] text-[16px] font-bold text-center outline-none focus:border-[#fd7e14] focus:ring-1 focus:ring-[#fd7e14] bg-white text-black transition-all"
                           />
                       </div>
                   </div>
 
+                  {/* Observation Field */}
+                  <div className="mb-[25px]">
+                      <label className="block text-[12px] font-bold text-[#666] mb-1.5 uppercase tracking-wide text-left">
+                          Observação (Opcional)
+                      </label>
+                      <textarea 
+                          value={pendingObservation}
+                          onChange={(e) => setPendingObservation(e.target.value)}
+                          rows={3}
+                          placeholder="Descreva a divergência aqui..."
+                          className="w-full p-[12px] border border-[#cbd5e1] rounded-[12px] text-[13px] outline-none focus:border-[#fd7e14] focus:ring-1 focus:ring-[#fd7e14] bg-white text-black resize-none transition-all"
+                      />
+                  </div>
+
+                  {/* Buttons */}
                   <div className="flex gap-3">
                       <button 
                           onClick={() => setPendingItem(null)}
-                          className="flex-1 p-[12px] bg-white border border-[#ccc] text-[#666] font-bold rounded-[10px] hover:bg-[#f1f1f1]"
+                          className="flex-1 p-[12px] bg-white border border-[#ccc] text-[#666] font-bold rounded-[10px] hover:bg-[#f1f1f1] transition-colors"
                       >
                           Cancelar
                       </button>
                       <button 
                           onClick={() => {
-                            const formattedObservation = `Pendência Registrada: Cargas (IN/H): ${pendingInhValue || '0'} | Cargas (IZ): ${pendingIzValue || '0'}`;
+                            // Structured data for webhook
+                            const pendencyData = {
+                                inh: pendingInhValue || '0',
+                                iz: pendingIzValue || '0',
+                                obs: pendingObservation || ''
+                            };
+                            
                             const itemId = pendingItem;
                             // Optimistically close modal
                             setPendingItem(null); 
-                            // Call submit
-                            handleInlineSubmit('Pendente', itemId!, formattedObservation);
+                            // Call submit with structure
+                            handleInlineSubmit('Pendente', itemId!, pendencyData);
                           }}
                           disabled={(!pendingInhValue && !pendingIzValue) || processingItems.includes(pendingItem!)}
-                          className="flex-1 p-[12px] bg-[#fd7e14] text-white font-bold rounded-[10px] shadow-md hover:bg-[#e8710e] disabled:opacity-60 disabled:cursor-not-allowed"
+                          className="flex-1 p-[12px] bg-[#fd7e14] text-white font-bold rounded-[10px] shadow-md hover:bg-[#e8710e] transition-all disabled:opacity-60 disabled:cursor-not-allowed hover:shadow-lg"
                       >
                           {processingItems.includes(pendingItem!) ? 'Processando...' : 'Confirmar'}
                       </button>
