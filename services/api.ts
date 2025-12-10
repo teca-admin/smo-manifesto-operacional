@@ -85,10 +85,11 @@ export const fetchNames = async (status?: string): Promise<string[]> => {
 
 export const fetchNamesForFinalization = async (): Promise<string[]> => {
   try {
+    // Agora busca usuários que tenham manifestos Iniciados OU Pendentes
     const { data, error } = await supabase
       .from('SMO_Sistema')
       .select('Usuario_Operação')
-      .ilike('Status', '%Manifesto Iniciado%');
+      .or('Status.ilike.%Manifesto Iniciado%,Status.ilike.%Manifesto Pendente%');
 
     if (error) {
         console.warn("Error fetching names for finalization from SMO_Sistema.", error);
@@ -130,11 +131,12 @@ export const fetchIdsByStatus = async (status: string): Promise<ManifestoItem[]>
 
 export const fetchManifestosForEmployee = async (name: string): Promise<string[]> => {
   try {
+    // Agora busca manifestos do usuário que estejam Iniciados OU Pendentes
     const { data, error } = await supabase
       .from('SMO_Sistema')
       .select('ID_Manifesto')
       .eq('Usuario_Operação', name)
-      .ilike('Status', '%Manifesto Iniciado%');
+      .or('Status.ilike.%Manifesto Iniciado%,Status.ilike.%Manifesto Pendente%');
 
     if (error) {
          console.warn("Error fetching employee manifestos.", error);
@@ -227,8 +229,9 @@ export const submitManifestoAction = async (
             .single();
         const currentStatus = (currentData?.Status || '').trim().toLowerCase();
 
-        if (!currentStatus.includes('manifesto iniciado')) {
-             return { success: false, message: 'Ação bloqueada: Este manifesto não está iniciado.' };
+        // Permite finalizar se estiver Iniciado OU Pendente
+        if (!currentStatus.includes('manifesto iniciado') && !currentStatus.includes('manifesto pendente')) {
+             return { success: false, message: 'Ação bloqueada: Este manifesto não está iniciado ou pendente.' };
         }
     } 
 
