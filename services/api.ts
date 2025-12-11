@@ -300,7 +300,11 @@ export const submitManifestoAction = async (
 
     // 3. Webhook Integration
     const webhookUrl = 'https://teca-admin-n8n.ly7t0m.easypanel.host/webhook/Manifesto-Operacional';
-    const formattedDate = new Date().toLocaleString('pt-BR');
+    
+    // Formatting date to "dd/mm/aaaa hh:mm:ss" as requested
+    const now = new Date();
+    const formattedDate = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+    
     let webhookBody: any = {};
 
     if (action === 'Iniciar Manifesto') {
